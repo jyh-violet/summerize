@@ -1,0 +1,70 @@
+linux 常用指令
+
+查看系统信息
+#sudo dmidecode|more   
+
+
+查看系统内核版本:
+# uname -a
+
+查看系统版本:
+# more /etc/redhat-release
+
+查看内核版本gcc版本
+# more /proc/version
+
+查看cpu 信息
+# grep "model name" /proc/cpuinfo
+# more /proc/cpuinfo
+
+# 查看物理CPU个数
+cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l
+
+# 查看每个物理CPU中core的个数(即核数)
+cat /proc/cpuinfo| grep "cpu cores"| uniq
+
+# 查看逻辑CPU的个数
+cat /proc/cpuinfo| grep "processor"| wc -l
+
+查看cpu 的位数
+# getconf LONG_BIT
+
+查看内存信息
+# more /proc/meminfo
+
+查看系统资源使用情况
+“vmstat reports information about processes, memory, paging, block IO, traps, and cpu activity.
+#vmstat 5
+
+“display Linux tasks
+#top
+
+“Display amount of free and used memory in the system
+#free
+
+查看磁盘i/o
+“用iostat查看磁盘/dev/sdc3的磁盘i/o情况，每两秒刷新一次
+$ iostat -d -x /dev/sdc3 2
+
+查看用户磁盘限额
+quota [-u] <username>
+
+测试磁盘吞吐
+使用dd测试吞吐量：
+#默认启用写缓存
+dd bs=64k count=4k if=/dev/zero of=test
+#最后一次性写入硬盘
+dd bs=64k count=4k if=/dev/zero of=test conv=fdatasync
+#每次读取64k马上写入硬盘
+dd if=/dev/zero of=test bs=64k count=4k oflag=dsync
+
+dd if=/dev/zero of=here bs=1G count=1 oflag=direct 使用dd命令对磁盘进行标准写测试。使用一下命令行读取和写入文件，记住添加oflag参数以绕过磁盘页面缓存。
+
+使用测试读吞吐量：
+hdparm -Tt /dev/vdc1
+
+使用fio测试iops和吞吐量：
+fio --bs=4k --ioengine=libaio --iodepth=1 --direct=1 --rw=read --time_based --runtime=600  --refill_buffers --norandommap --randrepeat=0 --group_reporting --name=fio-read --size=100G --filename=/dev/sdb
+block=4k iodepth=1 随机读测试，能反映磁盘的时延性能；
+block=128K iodepth=32 能反映峰值吞吐性能 ;
+block=4k iodepth=32 能反映峰值IOPS性能。

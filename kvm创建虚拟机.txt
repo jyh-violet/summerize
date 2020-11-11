@@ -1,0 +1,152 @@
+kvm 创建虚拟机
+
+1、验证主机是否支持硬件虚拟化
+# cat /proc/cpuinfo | grep svm # AMD硬件
+# cat /proc/cpuinfo | grep vmx # Intel硬件
+2、安装与配置
+# sudo yum install qemu-kvm virt-manager libvirt --skip-broken
+# sudo yum install qemu-kvm libvirt-bin virtinst bridge-utils virt-viewer virt-manager
+# sudo yum install virt-top
+# lsmod |grep kvm                                   #kvm模块一定要加载
+# sudo service libvirtd start                       #启动libvirt服务
+
+搭建网桥
+#sudo yum install net-tools
+#sudo yum install bridge-utils
+
+备份原文件
+#cd /etc/sysconfig/network-scripts/
+#cp ifcfg-bond0 ~/ifcfg-bond0.bk
+#vim ifcfg-br1
+DEVICE=br1
+TYPE=Bridge
+ONBOOT=yes
+NM_CONTROLLED=no
+BOOTPROTO=none
+IPADDR=10.11.1.194
+PREFIX=24
+GATEWAY=10.11.1.254
+DNS1=10.11.6.2
+
+添加网桥
+#sudo brctl addbr br1
+
+
+#vim ifcfg-bond0
+DEVICE=bond0
+HWADDR=D8:9D:67:23:86:2C
+TYPE=Ethernet
+UUID=c9965a51-84f9-4a7f-bfb9-271b05c9487a
+ONBOOT=yes
+NM_CONTROLLED=no
+BOOTPROTO=none
+DNS1=10.11.6.2
+BRIDGE=br1
+
+3、创建虚拟机
+3.1
+# sudo virsh net-list --all			#检查default 网络
+3.2 将普通用户加入到kvm和libvirt用户组中
+# sudo gpasswd -a jiyunhong kvm
+# sudo gpasswd -a jiyunhong qemu
+# sudo gpasswd -a jiyunhong libvirt
+
+修改libvirtd权限
+# sudo vim /etc/libvirt/qemu.conf
+user = "jiyunhong"
+group = "qemu"
+
+#重启libvirtd服务
+#sudo service libvirtd   restart
+
+3.3 创建目录
+# mkdir -p ~/mirrors/images/
+划分硬盘
+# qemu-img create -f qcow2 -o preallocation=metadata /home/jiyunhong/mirrors/images/mpptmp.qcow2 100G
+3.3 创建虚拟机
+修改python脚本的python目录
+# sudo vim /usr/bin/virt-install
+
+
+# sudo virt-install \
+  --virt-type=kvm \
+  --name=mpp17\
+  --ram=8192\
+  --vcpus=2 \
+  --hvm \
+  --accelerate \
+  --location=/home/jiyunhong/systemiso/CentOS-7-x86_64-DVD-1611.iso \
+  --network bridge=br1,model=virtio \
+  --graphics none \
+  -f /home/jiyunhong/mirrors/images/mpptmp.qcow2 \
+  --console pty,target_type=serial \
+  --extra-args 'console=ttyS0,115200n8 serial'
+
+
+3.5 设置 virsh consele 连接
+进入虚拟机
+# grubby --update-kernel=ALL --args="console=ttyS0"
+# reboot
+
+3.6 配置文件
+sudo virsh edit #name#
+使用virsh-install安装完KVM之后，会自动生成相应配置
+KVM的配置文件存储在/etc/libvirt/qemu/
+修改配置的时候需要关闭KVM virsh destroy vm_1
+使用virsh define vm_1.xml使配置生效
+使用virsh start vm_1启动虚拟机
+
+3.7 设置虚拟机网络配置
+进入虚拟机
+
+# vi /etc/sysconfig/network-scripts/ifcfg-eth0
+TYPE=Ethernet
+BOOTPROTO=static
+DEFROUTE=yes
+PEERDNS=yes
+PEERROUTES=yes
+IPV4_FAILURE_FATAL=no
+IPV6INIT=yes
+IPV6_AUTOCONF=yes
+IPV6_DEFROUTE=yes
+IPV6_PEERDNS=yes
+IPV6_PEERROUTES=yes
+IPV6_FAILURE_FATAL=no
+IPV6_ADDR_GEN_MODE=stable-privacy
+NAME=eth0
+UUID=7273ce5e-362a-4244-adc6-371c590ef1e6
+DEVICE=eth0
+ONBOOT=yes
+IPADDR="10.11.1.177"
+PREFIX="24"
+GATEWAY="10.11.1.254"
+DNS1="10.11.6.2"
+
+重启网络
+#sudo service network   restart
+
+ 
+3.8 
+# virsh list # 查看正在运行的虚拟主机列表
+# osinfo-query os # 查看virt-install所支持的OS参数列表
+# virsh list --all # 查看所有的虚拟机列表
+# virsh dominfo ubuntuserver1604 # 查看虚拟机信息
+# virsh start ubuntuserver1604 # 启动虚拟机
+# virsh shutdown ubuntuserver1604 # 关闭虚拟机
+# virsh suspend ubuntuserver1604 # 挂起虚拟机
+# virsh reboot ubuntuserver1604 #
+软重启（安全重启，相当于在虚拟机内部点击重启选项）虚拟机
+# virsh reset ubuntuserver1604 # 硬重启虚拟机（不安全，有可能数据丢失，相当于强制按主机上的重启按钮）
+# virsh autostart ubuntuserver1604 # 设置虚拟机随着宿主主机开机自动启动(开机自动启动的虚拟机配置文件会自动在目录/etc/libvirt/qemu/autostart/目录下生成)
+# virsh autostart --disable ubuntuserver1604 # 取消开机自启动
+# virsh destroy ubuntuserver1604 # 强制关闭虚拟机电源
+# virsh edit ubuntuserver1604 # 编辑虚拟机配置文件
+# virsh uri # 查看当前主机上hypervisor的链接路径
+# virsh undefine ubuntuserver1604 # 移除虚拟机定义，即从虚拟机列表中移除虚拟机 该命令只是删除/etc/libvirt/qemu/目录下名为ubuntuserver1604.xml的配置文件，并不会删除虚拟机磁盘文件
+# virsh define ubuntuserver1604.xml #通过虚拟机配置文件重新定义虚拟机
+
+查看当前内存大小
+# sudo virsh dominfo vm1-clone | grep memory
+设置虚拟机内存大小为512MB(动态调整，不需要关机)
+# sudo virsh setmem mpp01 8388608
+

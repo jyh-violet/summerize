@@ -1,0 +1,305 @@
+#配置主机名
+echo "10.11.1.169 mpp00
+10.11.1.170 mpp01
+10.11.1.171 mpp02
+10.11.1.172 mpp03
+10.11.1.173 mpp04
+10.11.1.174 mpp05
+10.11.1.175 mpp06
+10.11.1.176 mpp07
+10.11.1.177 mpp08
+10.11.1.178 mpp09
+10.11.1.179 mpp10
+10.11.1.180 mpp11
+10.11.1.181 mpp12
+10.11.1.182 mpp13
+10.11.1.183 mpp14
+10.11.1.184 mpp15
+10.11.1.185 mpp16
+10.11.1.186 mpp17
+10.11.1.187 mpp18
+10.11.1.188 mpp19
+10.11.1.189 mpp20" >> /etc/hosts
+
+echo "NETWORKING=yes HOSTNAME=mpp16 " >> /etc/sysconfig/network #所有机器，mpp01换成对应主机名
+
+#配置系统
+gpssh -f ~/conf/hostlist -v -e 'sudo echo "kernel.shmall = 4294967296
+
+kernel.shmmax = 500000000
+
+kernel.shmmni = 4096
+
+kernel.shmall = 4000000000
+
+kernel.sem = 250 512000 100 2048
+
+kernel.sysrq = 1
+
+kernel.core_uses_pid = 1
+
+kernel.msgmnb = 65536
+
+kernel.msgmax = 65536
+
+kernel.msgmni = 2048
+
+net.ipv4.tcp_syncookies = 1
+
+net.ipv4.ip_forward = 0
+
+net.ipv4.conf.default.accept_source_route = 0
+
+net.ipv4.tcp_tw_recycle = 1
+
+net.ipv4.tcp_max_syn_backlog = 4096
+
+net.ipv4.conf.all.arp_filter = 1
+
+net.ipv4.ip_local_port_range = 1025 65535
+
+net.core.netdev_max_backlog = 10000
+
+net.core.rmem_max = 2097152
+
+net.core.wmem_max = 2097152
+
+vm.overcommit_memory = 2 " >> /etc/sysctl.conf; sysctl -p '
+
+gpssh -f ~/conf/hostlist -v -e 'sudo echo "* soft nofile 65536
+
+* hard nofile 65536
+
+* soft nproc 131072
+
+* hard nproc 131072" >> /etc/security/limits.conf '
+
+
+gpssh -f ~/conf/hostlist -v -e 'sudo echo "# This file controls the state of SELinux on the system.
+
+# SELINUX= can take one of these three values:
+
+# enforcing - SELinux security policy is enforced.
+
+# permissive - SELinux prints warnings instead of enforcing.
+
+# disabled - No SELinux policy is loaded.
+
+SELINUX=disabled
+
+# SELINUXTYPE= can take one of these two values:
+
+# targeted - Targeted processes are protected,
+
+# mls - Multi Level Security protection.
+
+SELINUXTYPE=targeted" > /etc/selinux/config '
+
+
+#关闭防火墙 #创建用户组
+systemctl stop firewalld.service
+systemctl disable firewalld.service
+
+groupadd -g 530 gpadmin
+useradd -g 530 -u530 -m -d /home/gpadmin -s /bin/bash gpadmin
+passwd gpadmin
+
+echo "gpadmin ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+
+#安装包
+yum -y install rsync coreutils glib2 lrzsz sysstat e4fsprogs xfsprogs ntp readline-devel zlib zlib-devel openssl openssl-devel pam-devel libxml2-devel libxslt-devel python-devel tcl-devel gcc make smartmontools flex bison perl perl-devel perl-ExtUtils* OpenIPMI-tools openldap openldap-devel logrotate gcc-c++ python-py
+yum -y install bzip2-devel libevent-devel apr-devel curl-devel ed python-paramiko python-devel
+
+yum -y install wget unzip vim  net-tools
+wget https://bootstrap.pypa.io/get-pip.py
+python get-pip.py
+pip install lockfile paramiko setuptools epydoc psutil
+pip install --upgrade setuptools
+
+
+# 分发
+cd /home/gpadmin
+
+mkdir conf
+echo "mpp00
+mpp01
+mpp02
+mpp03
+mpp04
+mpp05
+mpp06
+mpp07
+mpp08
+mpp09
+mpp10
+mpp11
+mpp12
+mpp13
+mpp14
+mpp15
+mpp16" > /home/gpadmin/conf/hostlist 
+echo "mpp01
+mpp02
+mpp03
+mpp04
+mpp05
+mpp06
+mpp07
+mpp08
+mpp09
+mpp10
+mpp11
+mpp12
+mpp13
+mpp14
+mpp15
+mpp16" > /home/gpadmin/conf/seg_hosts 
+
+# master 上，进入gpadmin
+su gpadmin
+unzip mpp_fault_tolerant_team-gpft.bitbucket.org-737d754b85ce.zip
+mkdir /home/gpadmin/gpdb
+cd /home/gpadmin/mpp_fault_tolerant_team-gpft.bitbucket.org-737d754b85ce
+#安装
+./configure --prefix=/home/gpadmin/gpdb
+make
+make install
+
+#初始化环境变量 
+source /home/gpadmin/gpdb/greenplum_path.sh
+
+#设置gpssh登陆
+gpssh-exkeys -f /home/gpadmin/conf/hostlist 
+
+
+
+#分发
+gtar -cvf /home/gpadmin/gp.tar gpdb
+gpscp -f /home/gpadmin/conf/seg_hosts /home/gpadmin/gp.tar =:/home/gpadmin
+
+gpssh -f ~/conf/seg_hosts -v -e 'gtar -xvf  zstd-1.4.3.tar.gz;cd zstd-1.4.3; make; sudo make install '
+
+#安装
+gpssh -f ~/conf/seg_hosts -v -e 'gtar -xvf gp.tar; mkdir gpdata; cd gpdata; mkdir gpdatap1 gpdatap2 gpdatam1 gpdatam2 gpmaster; ll;'
+[gpadmin@mdw ~]$ gpssh -f /home/gpadmin/conf/hostlist 
+Note: command history unsupported on this machine ...
+=> pwd
+[sdw1] /home/gpadmin
+[sdw2] /home/gpadmin
+[ mdw] /home/gpadmin
+=> 
+在gpssh下解压之前的 tar
+=> gtar -xvf gp.tar
+最后创建数据库工作目录
+=> pwd
+[sdw1] /home/gpadmin
+[sdw2] /home/gpadmin
+[ mdw] /home/gpadmin
+=> mkdir gpdata
+=> cd gpdata
+=> mkdir gpdatap1 gpdatap2 gpdatam1 gpdatam2 gpmaster
+=> ll
+[sdw3] 总用量 20
+[sdw3] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatam1
+[sdw3] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatam2
+[sdw3] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatap1
+[sdw3] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatap2
+[sdw3] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpmaster
+[ mdw] 总用量 20
+[ mdw] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatam1
+[ mdw] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatam2
+[ mdw] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatap1
+[ mdw] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatap2
+[ mdw] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpmaster
+[sdw2] 总用量 20
+[sdw2] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatam1
+[sdw2] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatam2
+[sdw2] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatap1
+[sdw2] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpdatap2
+[sdw2] drwxrwxr-x 2 gpadmin gpadmin 4096 8月  18 19:46 gpmaster
+=> exit
+
+#创建数据库
+#设置环境变量
+echo "source /home/gpadmin/gpdb/greenplum_path.sh
+
+export MASTER_DATA_DIRECTORY=/home/gpadmin/gpdata/gpmaster/gpseg-1
+
+export PGPORT=2345
+
+export PGDATABASE=testDB " >> /home/gpadmin/.bash_profile
+ #环境变量生效
+ . ~/.bash_profile 
+
+ #配置其他机器
+gpssh -f ~/conf/seg_hosts -v -e  'mkdir conf;
+echo "mpp00
+mpp01
+mpp02
+mpp03
+mpp04
+mpp05
+mpp06
+mpp07
+mpp08
+mpp09
+mpp10
+mpp11
+mpp12
+mpp13
+mpp14
+mpp15
+mpp16" > /home/gpadmin/conf/hostlist '
+
+gpssh -f ~/conf/hostlist -v -e ' echo "source /home/gpadmin/gpdb/greenplum_path.sh
+
+export MASTER_DATA_DIRECTORY=/home/gpadmin/gpdata/gpmaster/gpseg-1
+
+export PGPORT=2345
+
+export PGDATABASE=testDB " >> /home/gpadmin/.bashrc'
+gpssh -f ~/conf/seg_hosts -v -e 'gpssh-exkeys -f /home/gpadmin/conf/hostlist'
+
+ 
+#编写数据库参数文件
+echo "ARRAY_NAME="Greenplum"
+
+SEG_PREFIX=gpseg
+
+PORT_BASE=40000
+
+declare -a DATA_DIRECTORY=(/home/gpadmin/gpdata/gpdatap1 /home/gpadmin/gpdata/gpdatap2)
+
+MASTER_HOSTNAME=mpp00
+
+MASTER_DIRECTORY=/home/gpadmin/gpdata/gpmaster
+
+##### Port number for the master instance.
+
+MASTER_PORT=2345
+
+# #### Shell utility used to connect to remote hosts.
+
+TRUSTED_SHELL=/usr/bin/ssh
+
+##### Maximum log file segments between automatic WAL checkpoints.
+
+CHECK_POINT_SEGMENTS=8
+
+ENCODING=UNICODE
+
+MIRROR_PORT_BASE=50000
+
+REPLICATION_PORT_BASE=41000
+
+MIRROR_REPLICATION_PORT_BASE=51000
+
+declare -a MIRROR_DATA_DIRECTORY=(/home/gpadmin/gpdata/gpdatam1 /home/gpadmin/gpdata/gpdatam2)
+
+MACHINE_LIST_FILE=/home/gpadmin/conf/seg_hosts" > /home/gpadmin/conf/gpinitsystem_config
+
+# 启动
+gpinitsystem -c /home/gpadmin/conf/gpinitsystem_config –a
+
+createdb testDB
